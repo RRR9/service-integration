@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "WSL": {
+      "commandName": "WSL2"
+    },
+    "ZudamalMavjiSomonServices": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
