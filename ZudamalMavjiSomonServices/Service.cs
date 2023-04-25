@@ -35,7 +35,6 @@ namespace ZudamalMavjiSomonServices
 
         static private void TryToPay()
         {
-            //string cardno = "8121703244005555";
             string response;
             string message = XmlDoc.CreateCardnoRequest(_number);
             SocketConnect.Request(message);
