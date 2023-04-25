@@ -13,7 +13,6 @@ namespace ZudamalMavjiSomonServices
         static private string _response;
         static public bool RequestPassed { get; set; }
 
-
         static public void Request(string message)
         {
             string address = ConfigurationManager.AppSettings["providerIP"];
