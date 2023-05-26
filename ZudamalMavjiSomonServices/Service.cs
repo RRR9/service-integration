@@ -15,10 +15,6 @@ namespace ZudamalMavjiSomonServices
         static private readonly HashSet<int> _accept = new HashSet<int>() { };
         static private readonly HashSet<int> _cancel = new HashSet<int>() { };
 
-        static private string _paymentId;
-        static private string _number;
-        static private string _provSum;
-
         private enum StatusInDataBase : int
         {
             Awaiting = 0,
@@ -26,21 +22,14 @@ namespace ZudamalMavjiSomonServices
             Cancel = 2
         }
 
-        static private void Initialize()
-        {
-            _paymentId = "";
-            _number = "";
-            _provSum = "";
-        }
-
-        static private void TryToPay()
+        static private void TryToPay(Payment payment)
         {
             string response;
-            string message = XmlDoc.CreateCardnoRequest(_number);
+            string message = XmlDoc.CreateCardnoRequest(payment.Number);
             SocketConnect.Request(message);
             if (!SocketConnect.RequestPassed)
             {
-                throw new MavjiSomonException();
+                throw new MavjiSomonException("Socket request does not pass successfully");
             }
 
             response = SocketConnect.Response();
@@ -51,16 +40,16 @@ namespace ZudamalMavjiSomonServices
 
             if(rtnCode != 0)
             {
-                ModifyPaymentStatus(GetPaymentStatusDb(rtnCode));
-                throw new MavjiSomonException($"return code: {rtnCode}");
+                ModifyPaymentStatus(GetPaymentStatusDb(rtnCode), payment);
+                throw new MavjiSomonException($"Return code: {rtnCode}");
             }
 
-            message = XmlDoc.CreatePaymentRequest(_number, _paymentId, _provSum);
+            message = XmlDoc.CreatePaymentRequest(payment.Number, payment.PaymentId, payment.ProvSum);
             SocketConnect.Request(message);
 
             if (!SocketConnect.RequestPassed)
             {
-                throw new MavjiSomonException();
+                throw new MavjiSomonException("Socket request does not pass successfully");
             }
 
             response = SocketConnect.Response();
@@ -69,7 +58,7 @@ namespace ZudamalMavjiSomonServices
             xmlDocument.LoadXml(response);
             rtnCode = int.Parse(xmlDocument.GetElementsByTagName("returncode")[0].InnerText);
 
-            ModifyPaymentStatus(GetPaymentStatusDb(rtnCode));
+            ModifyPaymentStatus(GetPaymentStatusDb(rtnCode), payment);
         }
 
         static public void Start()
@@ -82,25 +71,25 @@ namespace ZudamalMavjiSomonServices
             DataTable dt = SqlServer.GetData("GetPaymentsToSend", new SqlParameter[] { new SqlParameter("@ProviderID", _provId) });
             foreach (DataRow row in dt.Rows)
             {
-                Initialize();
-                if(decimal.Parse(row["ProviderSum"].ToString()) >= 15.0m)
+                try
                 {
-                    try
+                    Payment payment = new Payment();
+                    if (decimal.Parse(row["ProviderSum"].ToString()) >= 15.0m)
                     {
-                        _paymentId = row["PaymentID"].ToString();
-                        _number = row["Number"].ToString();
-                        _provSum = row["ProviderSum"].ToString();
+                        payment.PaymentId = row["PaymentID"].ToString();
+                        payment.Number = row["Number"].ToString();
+                        payment.ProvSum = row["ProviderSum"].ToString();
 
-                        TryToPay();
+                        TryToPay(payment);
                     }
-                    catch(Exception ex)
+                    else
                     {
-                        _log.Error(ex);
+                        ModifyPaymentStatus(StatusInDataBase.Cancel, payment);
                     }
                 }
-                else
+                catch (Exception ex)
                 {
-                    ModifyPaymentStatus(StatusInDataBase.Cancel);
+                    _log.Error(ex);
                 }
             }
         }
@@ -119,13 +108,13 @@ namespace ZudamalMavjiSomonServices
             return StatusInDataBase.Awaiting;
         }
 
-        static private void ModifyPaymentStatus(StatusInDataBase status)
+        static private void ModifyPaymentStatus(StatusInDataBase status, Payment payment)
         {
             SqlServer.ExecSP("ModifyPaymentStatus", new SqlParameter[]
             {
-                new SqlParameter("@PaymentID", _paymentId),
+                new SqlParameter("@PaymentID", payment.PaymentId),
                 new SqlParameter("@ErrorCode", status),
-                new SqlParameter("@ProviderPaymentID", _paymentId),
+                new SqlParameter("@ProviderPaymentID", payment.PaymentId),
                 new SqlParameter("@ProviderID", _provId)
             });
         }
